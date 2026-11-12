@@ -1,0 +1,2 @@
+Start Command 
+uvicorn	nse_analysis_api:app	--host	0.0.0.0	--port	$PORT

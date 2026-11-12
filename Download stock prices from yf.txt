@@ -1,0 +1,143 @@
+#Download stock prices from yahoo finance direcly
+import pandas as pd
+import yfinance as yf
+from datetime import datetime
+ticker="HINDUNILVR.NS"
+start_date="2000-01-01"
+end_date = datetime.today().strftime('%Y-%m-%d')
+data = yf.download(ticker, start=start_date, end=end_date)
+data.head
+
+#Save as CSV
+data.to_csv("hindunilvr_data.csv")
+**********************
+data[['Open','High','Low','Close','Volume']].describe()
+
+
+#Declare as time series
+data.index = pd.to_datetime(data.index)
+
+#Line Graph
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+ts = data['Close']
+
+plt.figure(figsize=(12,5))
+plt.plot(ts)
+
+# Show ticks every 2 years (you can change to 1, 3, etc.)
+plt.gca().xaxis.set_major_locator(mdates.YearLocator(2))
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+
+plt.title("HINDUNILVR Stock Price")
+plt.xlabel("Year")
+plt.ylabel("Price")
+plt.grid()
+
+plt.show()
+
+#Check for unit root
+from statsmodels.tsa.stattools import adfuller
+
+result = adfuller(ts.dropna())
+
+print("ADF Statistic:", result[0])
+print("p-value:", result[1])
+print("Critical Values:")
+for key, value in result[4].items():
+    print(key, ":", value)
+
+# Log differenced series
+import numpy as np
+
+ts_log = np.log(ts)
+ts_log_diff = ts_log.diff().dropna()
+
+#Check for unit root
+result = adfuller(ts_log_diff.dropna())
+
+print("ADF Statistic:", result[0])
+print("p-value:", result[1])
+print("Critical Values:")
+for key, value in result[4].items():
+    print(key, ":", value)
+
+# Check ACF and PACF for AR, MA lags
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+import matplotlib.pyplot as plt
+diff=ts_log_diff
+plot_acf(diff, lags=20)
+plot_pacf(diff, lags=20)
+
+plt.show()
+
+
+# Run ARIMA model
+from statsmodels.tsa.arima.model import ARIMA
+
+model = ARIMA(ts, order=(1,1,1))
+result = model.fit()
+
+print(result.summary())
+
+#I minute Data
+df = yf.download("AAPL", period="2d", interval="1m")
+df = yf.download("AAPL", period="7d", interval="1m")
+
+#Save as CSV
+df.to_csv("AAPL.csv")
+
+
+#Read CSV
+import pandas as pd
+df = pd.read_csv("AAPL.csv", skiprows=2)
+df.columns = ['Datetime', 'Close', 'High', 'Low', 'Open', 'Volume']
+df['Datetime'] = pd.to_datetime(df['Datetime'])
+df.set_index('Datetime', inplace=True)
+print(df.head())
+
+# Calculate moving averages
+df['SMA_10'] = df['Close'].rolling(10).mean()
+df['SMA_20'] = df['Close'].rolling(20).mean()
+# Create signal column
+df['Signal'] = 0
+df.loc[df['SMA_10'] > df['SMA_20'], 'Signal'] = 1
+# Create position (buy/sell points)
+df['Position'] = df['Signal'].diff()
+df[['Close','SMA_10','SMA_20','Signal','Position']].tail(20)
+
+#SMA Plotting 
+import matplotlib.pyplot as plt
+plt.figure(figsize=(12,6))
+plt.plot(df['Close'], label='Price')
+plt.plot(df['SMA_10'], label='SMA 10')
+plt.plot(df['SMA_20'], label='SMA 20')
+# Buy
+plt.scatter(df.index[df['Position'] == 1],
+            df['Close'][df['Position'] == 1],
+            marker='^', s=100, label='Buy')
+# Sell
+plt.scatter(df.index[df['Position'] == -1],
+            df['Close'][df['Position'] == -1],
+            marker='v', s=100, label='Sell')
+plt.legend()
+plt.title("SMA Crossover Strategy")
+plt.show()
+
+#RSI Computation
+delta = df['Close'].diff()
+gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+rs = gain / loss
+df['RSI'] = 100 - (100 / (1 + rs))
+
+import matplotlib.pyplot as plt
+plt.figure(figsize=(12,4))
+plt.plot(df['RSI'], label='RSI')
+plt.axhline(70, linestyle='--')
+plt.axhline(30, linestyle='--')
+plt.title("RSI Indicator")
+plt.legend()
+plt.show()
+
